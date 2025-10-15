@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLOv8 实时目标检测</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            color: white;
+            padding: 20px 30px;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .main-content {
+            display: flex;
+            flex-wrap: wrap;
+            padding: 20px;
+            gap: 20px;
+        }
+        
+        .video-container {
+            flex: 2;
+            min-width: 300px;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        #videoFeed {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .sidebar {
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .panel {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        }
+        
+        .panel h2 {
+            color: #4CAF50;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            flex: 1;
+            min-width: 120px;
+        }
+        
+        .btn-start {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .btn-stop {
+            background: #f44336;
+            color: white;
+        }
+        
+        .btn-capture {
+            background: #2196F3;
+            color: white;
+        }
+        
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .detection-item {
+            background: #f8f9fa;
+            border-left: 4px solid #4CAF50;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .detection-class {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .detection-confidence {
+            background: #4CAF50;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+        }
+        
+        .detection-center {
+            font-size: 0.8rem;
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+        
+        .no-detections {
+            text-align: center;
+            color: #7f8c8d;
+            padding: 20px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-active {
+            background: #4CAF50;
+        }
+        
+        .status-inactive {
+            background: #f44336;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #7f8c8d;
+            border-top: 1px solid #f0f0f0;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content {
+                flex-direction: column;
+            }
+            
+            .video-container, .sidebar {
+                flex: none;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>YOLOv8 实时目标检测</h1>
+            <p class="subtitle">基于 Flask 和 Ultralytics YOLOv8 的 Web 应用</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="video-container">
+                <img id="videoFeed" src="{{ url_for('video_feed') }}" alt="实时视频流">
+            </div>
+            
+            <div class="sidebar">
+                <div class="panel">
+                    <h2>控制面板</h2>
+                    <div class="controls">
+                        <button id="btnStart" class="btn-start">开始检测</button>
+                        <button id="btnStop" class="btn-stop" disabled>停止检测</button>
+                        <button id="btnCapture" class="btn-capture">截图保存</button>
+                    </div>
+                </div>
+                
+                <div class="panel">
+                    <h2>系统状态</h2>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" id="fps">0</div>
+                            <div class="stat-label">帧率 (FPS)</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="detectionCount">0</div>
+                            <div class="stat-label">检测数量</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">
+                                <span class="status-indicator" id="detectionStatus"></span>
+                                <span id="detectionStatusText">未知</span>
+                            </div>
+                            <div class="stat-label">检测状态</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">
+                                <span class="status-indicator" id="cameraStatus"></span>
+                                <span id="cameraStatusText">未知</span>
+                            </div>
+                            <div class="stat-label">摄像头状态</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="panel">
+                    <h2>检测结果</h2>
+                    <div id="detectionsList">
+                        <div class="no-detections">等待检测结果...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>YOLOv8 Flask Web 应用 &copy; 2024 | 最后更新: <span id="lastUpdate">-</span></p>
+        </footer>
+    </div>
+
+    <script>
+        // DOM元素
+        const videoFeed = document.getElementById('videoFeed');
+        const btnStart = document.getElementById('btnStart');
+        const btnStop = document.getElementById('btnStop');
+        const btnCapture = document.getElementById('btnCapture');
+        const detectionsList = document.getElementById('detectionsList');
+        const fpsElement = document.getElementById('fps');
+        const detectionCount = document.getElementById('detectionCount');
+        const detectionStatus = document.getElementById('detectionStatus');
+        const detectionStatusText = document.getElementById('detectionStatusText');
+        const cameraStatus = document.getElementById('cameraStatus');
+        const cameraStatusText = document.getElementById('cameraStatusText');
+        const lastUpdate = document.getElementById('lastUpdate');
+        
+        // 更新检测结果
+        function updateDetections() {
+            fetch('/detections')
+                .then(response => response.json())
+                .then(data => {
+                    // 更新检测列表
+                    if (data.detections && data.detections.length > 0) {
+                        let html = '';
+                        data.detections.forEach(det => {
+                            html += `
+                                <div class="detection-item">
+                                    <div>
+                                        <div class="detection-class">${det.class}</div>
+                                        <div class="detection-center">中心点: (${det.center[0]}, ${det.center[1]})</div>
+                                    </div>
+                                    <div class="detection-confidence">${(det.confidence * 100).toFixed(1)}%</div>
+                                </div>
+                            `;
+                        });
+                        detectionsList.innerHTML = html;
+                    } else {
+                        detectionsList.innerHTML = '<div class="no-detections">未检测到目标</div>';
+                    }
+                    
+                    // 更新统计信息
+                    detectionCount.textContent = data.detections.length;
+                    fpsElement.textContent = data.stats.fps.toFixed(1);
+                    lastUpdate.textContent = data.timestamp;
+                })
+                .catch(error => {
+                    console.error('获取检测结果失败:', error);
+                });
+        }
+        
+        // 更新系统状态
+        function updateStatus() {
+            fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    // 更新检测状态
+                    if (data.is_detecting) {
+                        detectionStatus.className = 'status-indicator status-active';
+                        detectionStatusText.textContent = '运行中';
+                        btnStart.disabled = true;
+                        btnStop.disabled = false;
+                    } else {
+                        detectionStatus.className = 'status-indicator status-inactive';
+                        detectionStatusText.textContent = '已停止';
+                        btnStart.disabled = false;
+                        btnStop.disabled = true;
+                    }
+                    
+                    // 更新摄像头状态
+                    if (data.camera_active) {
+                        cameraStatus.className = 'status-indicator status-active';
+                        cameraStatusText.textContent = '已连接';
+                    } else {
+                        cameraStatus.className = 'status-indicator status-inactive';
+                        cameraStatusText.textContent = '未连接';
+                    }
+                })
+                .catch(error => {
+                    console.error('获取状态失败:', error);
+                });
+        }
+        
+        // 按钮事件处理
+        btnStart.addEventListener('click', () => {
+            fetch('/start_detection', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                    updateStatus();
+                });
+        });
+        
+        btnStop.addEventListener('click', () => {
+            fetch('/stop_detection', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                    updateStatus();
+                });
+        });
+        
+        btnCapture.addEventListener('click', () => {
+            fetch('/capture', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                });
+        });
+        
+        // 定期更新
+        setInterval(updateDetections, 500);  // 每500ms更新检测结果
+        setInterval(updateStatus, 2000);     // 每2s更新系统状态
+        
+        // 初始化
+        updateStatus();
+    </script>
+</body>
+</html>
