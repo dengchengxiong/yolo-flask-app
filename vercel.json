@@ -2,14 +2,20 @@
   "version": 2,
   "builds": [
     {
-      "src": "app.py",
+      "src": "app_minimal.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "app.py"
+      "dest": "app_minimal.py"
     }
-  ]
+  ],
+  "functions": {
+    "app_minimal.py": {
+      "maxDuration": 10,
+      "memory": 1024
+    }
+  }
 }
